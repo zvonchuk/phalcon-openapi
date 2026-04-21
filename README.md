@@ -111,33 +111,85 @@ class UserController extends ApiController
 Used for both **runtime validation** (via `DtoValidator`) and **OpenAPI schema generation**:
 
 ```php
-use PhalconOpenApi\Attribute\{Email, Min, Max, StringLength, Format, Pattern};
+use PhalconOpenApi\Attribute\{Email, Min, Max, StringLength, Format, Pattern, Enum, Url, NotBlank};
 
 class CreateUserRequest
 {
+    #[NotBlank]
     #[StringLength(min: 1, max: 255)]
     public string $name;
 
     #[Email]
     public string $email;
 
-    public ?string $phone = null;  // nullable → type: ["string", "null"]
+    public ?string $phone = null;       // nullable → type: ["string", "null"]
 
     #[Min(1), Max(150)]
     public int $age;
+
+    #[Enum(['active', 'inactive'])]
+    public string $status = 'active';   // → enum in OpenAPI schema
+
+    #[Url]
+    public ?string $website = null;     // → format: uri in schema
+
+    #[Format('date')]
+    public ?string $birthDate = null;   // → format: date in schema
+
+    #[Pattern('/^\+\d{10,15}$/')]       // PCRE delimiters stripped for OpenAPI
+    public ?string $mobile = null;
 }
 ```
 
+| Attribute | Validates | OpenAPI Schema |
+|---|---|---|
+| `#[Email]` | Valid email format | `format: email` |
+| `#[StringLength(min: 1, max: 255)]` | String length bounds | `minLength`, `maxLength` |
+| `#[Min(1)]`, `#[Max(150)]` | Numeric range | `minimum`, `maximum` |
+| `#[Enum(['a', 'b'])]` | Allowed values | `enum: ["a", "b"]` |
+| `#[Url]` | Valid URL | `format: uri` |
+| `#[NotBlank]` | Rejects whitespace-only | `minLength: 1` |
+| `#[Format('date')]` | Date/datetime/uuid/uri | `format: date` |
+| `#[Pattern('/regex/')]` | PCRE regex match | `pattern: regex` |
+
 ### Nested DTOs and Typed Arrays
 
+Nested objects are validated recursively with dot-notation error paths:
+
 ```php
-class OrderResponse
+class CreateOrderRequest
 {
-    public int $id;
-    public AddressDto $shippingAddress;  // → $ref to AddressDto schema
+    #[StringLength(min: 1)]
+    public string $orderNumber;
+
+    public AddressDto $shippingAddress;  // → $ref + recursive validation
 
     /** @var OrderItemDto[] */
-    public array $items = [];            // → array with $ref items
+    public array $items = [];            // → array with $ref + per-item validation
+}
+
+class AddressDto
+{
+    #[NotBlank]
+    public string $street;
+
+    #[NotBlank]
+    public string $city;
+
+    #[Pattern('/^\d{5}$/')]
+    public string $zip;
+}
+```
+
+Validation errors for nested objects use dot-notation:
+```json
+{
+    "code": 422,
+    "message": "Validation failed",
+    "errors": [
+        "shippingAddress.city is required",
+        "items[0].zip must match pattern /^\\d{5}$/"
+    ]
 }
 ```
 
