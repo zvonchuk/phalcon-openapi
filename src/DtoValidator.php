@@ -1,0 +1,186 @@
+<?php
+
+namespace PhalconOpenApi;
+
+use PhalconOpenApi\Attribute\Email;
+use PhalconOpenApi\Attribute\Format;
+use PhalconOpenApi\Attribute\Max;
+use PhalconOpenApi\Attribute\Min;
+use PhalconOpenApi\Attribute\Pattern;
+use PhalconOpenApi\Attribute\StringLength;
+use ReflectionClass;
+use ReflectionNamedType;
+use ReflectionProperty;
+
+class DtoValidator
+{
+    /**
+     * Validate data against DTO class definition.
+     * Returns array of error messages, empty if valid.
+     *
+     * @return string[]
+     */
+    public function validate(string $dtoClass, array $data): array
+    {
+        $errors = [];
+        $ref = new ReflectionClass($dtoClass);
+
+        foreach ($ref->getProperties(ReflectionProperty::IS_PUBLIC) as $prop) {
+            $name = $prop->getName();
+            $type = $prop->getType();
+            $exists = array_key_exists($name, $data);
+            $value = $data[$name] ?? null;
+
+            // Required check: no default + not nullable = required
+            if (!$exists && !$prop->hasDefaultValue()) {
+                if ($type instanceof ReflectionNamedType && $type->allowsNull()) {
+                    continue;
+                }
+                $errors[] = "{$name} is required";
+                continue;
+            }
+
+            if (!$exists) {
+                continue;
+            }
+
+            // Type check
+            if ($type instanceof ReflectionNamedType && $value !== null) {
+                $typeError = $this->checkType($name, $value, $type->getName());
+                if ($typeError !== null) {
+                    $errors[] = $typeError;
+                    continue; // skip attribute validation if type is wrong
+                }
+            }
+
+            // Nullable check
+            if ($value === null) {
+                if ($type instanceof ReflectionNamedType && !$type->allowsNull()) {
+                    $errors[] = "{$name} must not be null";
+                }
+                continue;
+            }
+
+            // Attribute validation
+            foreach ($prop->getAttributes() as $attr) {
+                $attrError = $this->validateAttribute($name, $value, $attr);
+                if ($attrError !== null) {
+                    $errors[] = $attrError;
+                }
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Create and populate DTO from data array.
+     */
+    public function hydrate(string $dtoClass, array $data): object
+    {
+        $dto = new $dtoClass();
+        $ref = new ReflectionClass($dtoClass);
+
+        foreach ($ref->getProperties(ReflectionProperty::IS_PUBLIC) as $prop) {
+            $name = $prop->getName();
+            if (array_key_exists($name, $data)) {
+                $prop->setValue($dto, $data[$name]);
+            }
+        }
+
+        return $dto;
+    }
+
+    private function checkType(string $name, mixed $value, string $expectedType): ?string
+    {
+        $valid = match ($expectedType) {
+            'int' => is_int($value),
+            'float' => is_int($value) || is_float($value),
+            'string' => is_string($value),
+            'bool' => is_bool($value),
+            'array' => is_array($value),
+            default => true,
+        };
+
+        if (!$valid) {
+            return "{$name} must be of type {$expectedType}";
+        }
+
+        return null;
+    }
+
+    private function validateAttribute(string $name, mixed $value, \ReflectionAttribute $attr): ?string
+    {
+        $attrName = $attr->getName();
+
+        if ($attrName === Email::class) {
+            if (!filter_var($value, FILTER_VALIDATE_EMAIL)) {
+                return "{$name} must be a valid email address";
+            }
+        }
+
+        if ($attrName === Min::class) {
+            $instance = $attr->newInstance();
+            if ($value < $instance->value) {
+                return "{$name} must be at least {$instance->value}";
+            }
+        }
+
+        if ($attrName === Max::class) {
+            $instance = $attr->newInstance();
+            if ($value > $instance->value) {
+                return "{$name} must be at most {$instance->value}";
+            }
+        }
+
+        if ($attrName === StringLength::class) {
+            $instance = $attr->newInstance();
+            $len = mb_strlen($value);
+            if ($instance->min !== null && $len < $instance->min) {
+                return "{$name} must be at least {$instance->min} characters";
+            }
+            if ($instance->max !== null && $len > $instance->max) {
+                return "{$name} must be at most {$instance->max} characters";
+            }
+        }
+
+        if ($attrName === Format::class) {
+            $instance = $attr->newInstance();
+            $formatError = $this->checkFormat($name, $value, $instance->format);
+            if ($formatError !== null) {
+                return $formatError;
+            }
+        }
+
+        if ($attrName === Pattern::class) {
+            $instance = $attr->newInstance();
+            if (!preg_match($instance->regex, $value)) {
+                return "{$name} must match pattern {$instance->regex}";
+            }
+        }
+
+        return null;
+    }
+
+    private function checkFormat(string $name, mixed $value, string $format): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $valid = match ($format) {
+            'date' => (bool) \DateTime::createFromFormat('Y-m-d', $value),
+            'date-time' => (bool) \DateTime::createFromFormat('Y-m-d\TH:i:s', $value)
+                || (bool) \DateTime::createFromFormat(\DateTimeInterface::RFC3339, $value),
+            'uuid' => (bool) preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $value),
+            'url', 'uri' => (bool) filter_var($value, FILTER_VALIDATE_URL),
+            default => true,
+        };
+
+        if (!$valid) {
+            return "{$name} must be a valid {$format}";
+        }
+
+        return null;
+    }
+}
