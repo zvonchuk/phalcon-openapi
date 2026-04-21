@@ -3,11 +3,14 @@
 namespace PhalconOpenApi;
 
 use PhalconOpenApi\Attribute\Email;
+use PhalconOpenApi\Attribute\Enum;
 use PhalconOpenApi\Attribute\Format;
 use PhalconOpenApi\Attribute\Max;
 use PhalconOpenApi\Attribute\Min;
+use PhalconOpenApi\Attribute\NotBlank;
 use PhalconOpenApi\Attribute\Pattern;
 use PhalconOpenApi\Attribute\StringLength;
+use PhalconOpenApi\Attribute\Url;
 use ReflectionClass;
 use ReflectionNamedType;
 use ReflectionProperty;
@@ -68,6 +71,32 @@ class DtoValidator
                     $errors[] = $attrError;
                 }
             }
+
+            // Recursive nested DTO validation
+            if ($type instanceof ReflectionNamedType && is_array($value)) {
+                $typeName = $type->getName();
+                if ($this->isDto($typeName)) {
+                    $nestedErrors = $this->validate($typeName, $value);
+                    foreach ($nestedErrors as $nestedError) {
+                        $errors[] = "{$name}.{$nestedError}";
+                    }
+                }
+            }
+
+            // Typed array validation via @var ClassName[]
+            if ($type instanceof ReflectionNamedType && $type->getName() === 'array' && is_array($value)) {
+                $itemClass = $this->extractArrayItemClass($prop);
+                if ($itemClass !== null) {
+                    foreach ($value as $index => $item) {
+                        if (is_array($item)) {
+                            $itemErrors = $this->validate($itemClass, $item);
+                            foreach ($itemErrors as $itemError) {
+                                $errors[] = "{$name}[{$index}].{$itemError}";
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         return $errors;
@@ -75,6 +104,7 @@ class DtoValidator
 
     /**
      * Create and populate DTO from data array.
+     * Recursively hydrates nested DTOs and typed arrays.
      */
     public function hydrate(string $dtoClass, array $data): object
     {
@@ -84,11 +114,59 @@ class DtoValidator
         foreach ($ref->getProperties(ReflectionProperty::IS_PUBLIC) as $prop) {
             $name = $prop->getName();
             if (array_key_exists($name, $data)) {
-                $prop->setValue($dto, $data[$name]);
+                $value = $data[$name];
+                $type = $prop->getType();
+
+                // Recursively hydrate nested DTO
+                if ($type instanceof ReflectionNamedType && is_array($value)) {
+                    $typeName = $type->getName();
+                    if ($this->isDto($typeName)) {
+                        $value = $this->hydrate($typeName, $value);
+                    } elseif ($typeName === 'array') {
+                        $itemClass = $this->extractArrayItemClass($prop);
+                        if ($itemClass !== null) {
+                            $value = array_map(
+                                fn($item) => is_array($item) ? $this->hydrate($itemClass, $item) : $item,
+                                $value
+                            );
+                        }
+                    }
+                }
+
+                $prop->setValue($dto, $value);
             }
         }
 
         return $dto;
+    }
+
+    private function isDto(string $typeName): bool
+    {
+        if (in_array($typeName, ['int', 'float', 'string', 'bool', 'array', 'object', 'mixed'], true)) {
+            return false;
+        }
+        return class_exists($typeName);
+    }
+
+    private function extractArrayItemClass(ReflectionProperty $prop): ?string
+    {
+        $doc = $prop->getDocComment();
+        if ($doc === false) {
+            return null;
+        }
+
+        if (preg_match('/@var\s+([\w\\\\]+)\[\]/', $doc, $matches)) {
+            $className = $matches[1];
+            if (class_exists($className)) {
+                return $className;
+            }
+            $ns = $prop->getDeclaringClass()->getNamespaceName();
+            if ($ns !== '' && class_exists($ns . '\\' . $className)) {
+                return $ns . '\\' . $className;
+            }
+        }
+
+        return null;
     }
 
     private function checkType(string $name, mixed $value, string $expectedType): ?string
@@ -99,7 +177,7 @@ class DtoValidator
             'string' => is_string($value),
             'bool' => is_bool($value),
             'array' => is_array($value),
-            default => true,
+            default => $this->isDto($expectedType) ? is_array($value) : true,
         };
 
         if (!$valid) {
@@ -156,6 +234,26 @@ class DtoValidator
             $instance = $attr->newInstance();
             if (!preg_match($instance->regex, $value)) {
                 return "{$name} must match pattern {$instance->regex}";
+            }
+        }
+
+        if ($attrName === Enum::class) {
+            $instance = $attr->newInstance();
+            if (!in_array($value, $instance->values, true)) {
+                $allowed = implode(', ', $instance->values);
+                return "{$name} must be one of: {$allowed}";
+            }
+        }
+
+        if ($attrName === Url::class) {
+            if (!filter_var($value, FILTER_VALIDATE_URL)) {
+                return "{$name} must be a valid URL";
+            }
+        }
+
+        if ($attrName === NotBlank::class) {
+            if (is_string($value) && trim($value) === '') {
+                return "{$name} must not be blank";
             }
         }
 

@@ -113,6 +113,12 @@ class SchemaBuilder
                         $propSchema['format'] = $attr->newInstance()->format;
                     } elseif ($attrName === \PhalconOpenApi\Attribute\Pattern::class) {
                         $propSchema['pattern'] = $this->stripPcreDelimiters($attr->newInstance()->regex);
+                    } elseif ($attrName === \PhalconOpenApi\Attribute\Enum::class) {
+                        $propSchema['enum'] = $attr->newInstance()->values;
+                    } elseif ($attrName === \PhalconOpenApi\Attribute\Url::class) {
+                        $propSchema['format'] = 'uri';
+                    } elseif ($attrName === \PhalconOpenApi\Attribute\NotBlank::class) {
+                        $propSchema['minLength'] = max($propSchema['minLength'] ?? 0, 1);
                     }
                 }
 

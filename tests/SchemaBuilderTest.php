@@ -108,4 +108,28 @@ class SchemaBuilderTest extends TestCase
             $schema['properties']['addresses']['items']['$ref']
         );
     }
+
+    public function testEnumInSchema(): void
+    {
+        $builder = new SchemaBuilder();
+        $schema = $builder->build(Fixtures\DtoWithEnum::class);
+
+        $this->assertSame(['active', 'inactive', 'banned'], $schema['properties']['status']['enum']);
+    }
+
+    public function testUrlFormatInSchema(): void
+    {
+        $builder = new SchemaBuilder();
+        $schema = $builder->build(Fixtures\DtoWithEnum::class);
+
+        $this->assertSame('uri', $schema['properties']['website']['format']);
+    }
+
+    public function testNotBlankSetsMinLength(): void
+    {
+        $builder = new SchemaBuilder();
+        $schema = $builder->build(Fixtures\DtoWithEnum::class);
+
+        $this->assertSame(1, $schema['properties']['name']['minLength']);
+    }
 }
