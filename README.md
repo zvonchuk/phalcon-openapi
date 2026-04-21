@@ -1,5 +1,11 @@
 # phalcon-openapi
 
+[![Tests](https://github.com/zvonchuk/phalcon-openapi/actions/workflows/tests.yml/badge.svg)](https://github.com/zvonchuk/phalcon-openapi/actions)
+[![Latest Stable Version](https://img.shields.io/packagist/v/zvonchuk/phalcon-openapi.svg)](https://packagist.org/packages/zvonchuk/phalcon-openapi)
+[![PHP Version](https://img.shields.io/packagist/php-v/zvonchuk/phalcon-openapi.svg)](https://www.php.net/)
+[![License](https://img.shields.io/packagist/l/zvonchuk/phalcon-openapi.svg)](LICENSE)
+[![PHPStan](https://img.shields.io/badge/PHPStan-level%206-brightgreen.svg)](https://phpstan.org/)
+
 Automatic **OpenAPI 3.1** spec generation for Phalcon PHP applications.
 
 Reads your existing code via reflection and Phalcon APIs — no annotations, no YAML, no manual work. Unlike `zircote/swagger-php`, which requires a parallel layer of `#[OA\...]` attributes, this package infers everything from your routes, controllers, models, and DTOs.
