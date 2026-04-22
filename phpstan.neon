@@ -1,0 +1,12 @@
+parameters:
+    level: 5
+    paths:
+        - src
+    scanFiles:
+        - phpstan-phalcon-stubs.php
+    excludePaths:
+        - tests
+        # SchemaBuilder uses Phalcon\Db\Column constants which trigger
+        # PHPStan internal error: ReflectionClassConstant::getType()
+        # See: https://github.com/phpstan/phpstan/issues/10029
+        - src/SchemaBuilder.php
