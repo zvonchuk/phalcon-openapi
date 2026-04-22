@@ -57,6 +57,22 @@ class SchemaBuilder
         $this->schemas[$name] = $schema;
     }
 
+    /**
+     * Check if a DTO class contains any #[FileUpload] properties.
+     */
+    public function hasFileUpload(string $className): bool
+    {
+        $ref = new ReflectionClass($className);
+        foreach ($ref->getProperties(ReflectionProperty::IS_PUBLIC) as $prop) {
+            foreach ($prop->getAttributes() as $attr) {
+                if ($attr->getName() === \PhalconOpenApi\Attribute\FileUpload::class) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private function buildFromDto(string $className): array
     {
         $ref = new ReflectionClass($className);
@@ -119,6 +135,16 @@ class SchemaBuilder
                         $propSchema['format'] = 'uri';
                     } elseif ($attrName === \PhalconOpenApi\Attribute\NotBlank::class) {
                         $propSchema['minLength'] = max($propSchema['minLength'] ?? 0, 1);
+                    } elseif ($attrName === \PhalconOpenApi\Attribute\FileUpload::class) {
+                        $instance = $attr->newInstance();
+                        if ($instance->multiple) {
+                            $propSchema = [
+                                'type'  => 'array',
+                                'items' => ['type' => 'string', 'format' => 'binary'],
+                            ];
+                        } else {
+                            $propSchema = ['type' => 'string', 'format' => 'binary'];
+                        }
                     }
                 }
 

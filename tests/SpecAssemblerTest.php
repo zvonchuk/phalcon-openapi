@@ -334,4 +334,44 @@ class SpecAssemblerTest extends TestCase
         // The pagination wrapping only applies to convention-based responses.
         $this->assertArrayHasKey('200', $spec['paths']['/secure']['get']['responses']);
     }
+
+    // --- File Upload ---
+
+    public function testFileUploadUsesMultipartFormData(): void
+    {
+        $assembler = $this->buildAssembler([
+            [
+                'path'       => '/fakes/upload',
+                'pathParams' => [],
+                'method'     => 'post',
+                'controller' => Fixtures\FakeController::class,
+                'action'     => 'uploadAction',
+            ],
+        ]);
+
+        $spec = $assembler->generate();
+
+        $requestBody = $spec['paths']['/fakes/upload']['post']['requestBody'];
+        $this->assertArrayHasKey('multipart/form-data', $requestBody['content']);
+        $this->assertArrayNotHasKey('application/json', $requestBody['content']);
+    }
+
+    public function testNonFileUploadUsesApplicationJson(): void
+    {
+        $assembler = $this->buildAssembler([
+            [
+                'path'       => '/fakes',
+                'pathParams' => [],
+                'method'     => 'post',
+                'controller' => Fixtures\FakeController::class,
+                'action'     => 'createAction',
+            ],
+        ]);
+
+        $spec = $assembler->generate();
+
+        $requestBody = $spec['paths']['/fakes']['post']['requestBody'];
+        $this->assertArrayHasKey('application/json', $requestBody['content']);
+        $this->assertArrayNotHasKey('multipart/form-data', $requestBody['content']);
+    }
 }

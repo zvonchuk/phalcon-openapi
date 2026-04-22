@@ -37,4 +37,9 @@ class FakeController
     public function describedAction(): void {}
 
     public function deleteAction(int $id): void {}
+
+    public function uploadAction(UploadAvatarDto $body): SimpleDto
+    {
+        return new SimpleDto();
+    }
 }

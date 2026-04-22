@@ -132,4 +132,33 @@ class SchemaBuilderTest extends TestCase
 
         $this->assertSame(1, $schema['properties']['name']['minLength']);
     }
+
+    public function testFileUploadSingleBinary(): void
+    {
+        $builder = new SchemaBuilder();
+        $schema = $builder->build(Fixtures\UploadAvatarDto::class);
+
+        $this->assertSame('string', $schema['properties']['avatar']['type']);
+        $this->assertSame('binary', $schema['properties']['avatar']['format']);
+        // Non-file properties should be normal
+        $this->assertSame('string', $schema['properties']['name']['type']);
+    }
+
+    public function testFileUploadMultiple(): void
+    {
+        $builder = new SchemaBuilder();
+        $schema = $builder->build(Fixtures\UploadPhotosDto::class);
+
+        $this->assertSame('array', $schema['properties']['photos']['type']);
+        $this->assertSame('string', $schema['properties']['photos']['items']['type']);
+        $this->assertSame('binary', $schema['properties']['photos']['items']['format']);
+    }
+
+    public function testHasFileUploadDetection(): void
+    {
+        $builder = new SchemaBuilder();
+
+        $this->assertTrue($builder->hasFileUpload(Fixtures\UploadAvatarDto::class));
+        $this->assertFalse($builder->hasFileUpload(Fixtures\SimpleDto::class));
+    }
 }

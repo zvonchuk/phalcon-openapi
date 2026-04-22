@@ -120,10 +120,13 @@ class SpecAssembler
         if ($info['bodyClass'] !== null) {
             $this->schemaBuilder->build($info['bodyClass']);
             $refName = $this->schemaBuilder->getRefName($info['bodyClass']);
+            $contentType = $this->schemaBuilder->hasFileUpload($info['bodyClass'])
+                ? 'multipart/form-data'
+                : 'application/json';
             $operation['requestBody'] = [
                 'required' => true,
                 'content'  => [
-                    'application/json' => [
+                    $contentType => [
                         'schema' => ['$ref' => '#/components/schemas/' . $refName],
                     ],
                 ],
